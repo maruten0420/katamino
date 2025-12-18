@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Katamino Solver & Game</title>
+    <style>
+        :root {
+            --cell-size: 45px; 
+            --board-bg: #2c3e50;
+            --board-border: #34495e;
+            --ui-bg: #ecf0f1;
+            --text-color: #2c3e50;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--ui-bg);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+            min-height: 100vh;
+        }
+
+        h1 { margin: 0 0 10px 0; font-size: 1.5rem; }
+
+        /* 上部コントロール */
+        .controls-top {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .board-info {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #2980b9;
+        }
+
+        /* ゲームボードエリア */
+        #game-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: auto;
+            max-width: 100%;
+        }
+
+        #board {
+            display: grid;
+            background-color: var(--board-bg);
+            border: 5px solid var(--board-border);
+            position: relative;
+            flex-shrink: 0; 
+        }
+
+        .cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            border: 1px solid rgba(255,255,255,0.15);
+            box-sizing: border-box; 
+        }
+
+        /* 下部エリア（パレット） */
+        .palette-container {
+            display: flex;
+            width: 100%;
+            gap: 10px; /* 間隔を狭める */
+            max-width: 1200px;
+            align-items: flex-start;
+            /* 画面が許す限り横並びを維持 */
+            flex-wrap: nowrap; 
+        }
+
+        .palette-box {
+            /* 左右均等かつ、幅を確保 */
+            flex: 1 1 0;
+            min-width: 150px; /* 最低幅 */
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            height: auto; 
+        }
+
+        .palette-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        .piece-pool {
+            position: relative;
+            width: 100%;
+            min-height: 250px;
+        }
+
+        /* ピースのスタイル */
+        .piece {
+            position: absolute;
+            cursor: grab;
+            display: grid;
+            gap: 0;
+            z-index: 100;
+            touch-action: none;
+            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
+            transition: transform 0.1s, left 0.1s, top 0.1s;
+        }
+        
+        .piece.dragging {
+            opacity: 0.9;
+            cursor: grabbing;
+            z-index: 1000;
+            pointer-events: none;
+            filter: drop-shadow(5px 5px 10px rgba(0,0,0,0.5));
+            transition: none;
+        }
+
+        .piece-cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.6); 
+        }
+
+        /* 色定義 */
+        .c-F { background-color: #C8C8C8; }
+        .c-I { background-color: #0000FF; }
+        .c-L { background-color: #FFC800; }
+        .c-N { background-color: #330066; }
+        .c-P { background-color: #FFAFAF; }
+        .c-T { background-color: #006400; }
+        .c-U { background-color: #FFFF00; }
+        .c-V { background-color: #33CCFF; }
+        .c-W { background-color: #00FF00; }
+        .c-X { background-color: #FF0000; }
+        .c-Y { background-color: #996600; }
+        .c-Z { background-color: #0070C0; }
+
+        /* コントロールボタン群 */
+        .controls-bottom {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 8px;
+            padding: 8px;
+            background: #fff;
+            border-radius: 8px;
+            /* 幅を狭く固定 */
+            flex: 0 0 135px;
+            width: 135px;
+            min-width: 135px;
+        }
+
+        button {
+            padding: 10px 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+        }
+
+        .btn-calc { background-color: #27ae60; color: white; }
+        .btn-calc:hover { background-color: #219150; }
+        .btn-undo { background-color: #c0392b; color: white; }
+        .btn-undo:hover { background-color: #a93226; }
+        .btn-undo:disabled { background-color: #e6b0aa; cursor: not-allowed; }
+        .btn-reset { background-color: #7f8c8d; color: white; }
+
+        /* 進捗バー */
+        #progress-container {
+            width: 100%;
+            height: 15px;
+            background-color: #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 5px;
+            display: none;
+        }
+
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: #3498db;
+            transition: width 0.2s;
+        }
+        
+        #status-msg {
+            text-align: center;
+            font-size: 0.85rem;
+            min-height: 1.2em;
+            color: #e74c3c;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        /* スマホ対応 */
+        @media (max-width: 700px) {
+            :root { --cell-size: 35px; } 
+            /* 狭い画面では縦並びを許可 */
+            .palette-container { flex-wrap: wrap; }
+            .palette-box { width: 100%; flex: 1 1 100%; }
+            .controls-bottom { width: 100%; flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+            button { flex: 1; }
+            #game-area { justify-content: flex-start; overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls-top">
+        <h1>Katamino Web Solver</h1>
+        <div class="board-info">
+            ボード幅: <span id="board-width-display">12</span> (ペンタ数: <span id="penta-count-display">12</span>)
+        </div>
+        <button class="btn-reset" id="btn-reset" onclick="resetGame()">リセット</button>
+    </div>
+
+    <div id="game-area">
+        <div id="board">
+            <!-- Grid cells generated by JS -->
+        </div>
+    </div>
+
+    <div class="palette-container">
+        <!-- 左下: 配置したいカタミノ -->
+        <div class="palette-box">
+            <div class="palette-header">使用するピース</div>
+            <div id="pool-active" class="piece-pool"></div>
+        </div>
+
+        <!-- コントロールボタン -->
+        <div class="controls-bottom">
+            <div id="status-msg"></div>
+            <button class="btn-calc" id="btn-solve" onclick="startSolver()">計算・配置</button>
+            <button class="btn-undo" id="btn-restore" onclick="restoreState()" disabled>戻る</button>
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+            </div>
+            <div style="font-size:0.75rem; margin-top:8px; color:#555; line-height: 1.4;">
+                <strong>操作:</strong><br>
+                🖱️ドラッグ: 移動<br>
+                🖱️クリック: 回転<br>
+                ⇧+クリック: 反転<br>
+                <span style="color:#2980b9; font-weight:bold;">Ctrl+クリック:</span><br>
+                使用⇔除外 入替
+            </div>
+        </div>
+
+        <!-- 右下: 使いたくないカタミノ -->
+        <div class="palette-box">
+            <div class="palette-header">除外するピース</div>
+            <div id="pool-inactive" class="piece-pool"></div>
+        </div>
+    </div>
+
+<script>
+/**
+ * 1. データ定義と初期化
+ */
+function getCellSize() {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
+}
+
+let BOARD_ROWS = 5;
+let BOARD_COLS = 12;
+
+const PIECES_DEF = {
+    'F': [[1,0], [1,1], [0,1], [-1,1], [0,2]],
+    'I': [[0,0], [0,1], [0,2], [0,3], [0,4]],
+    'L': [[0,0], [0,1], [0,2], [0,3], [1,0]],
+    'N': [[1,0], [1,1], [0,1], [0,2], [0,3]],
+    'P': [[0,0], [0,1], [1,0], [1,1], [0,2]],
+    'T': [[0,0], [0,1], [0,2], [1,1], [2,1]],
+    'U': [[0,0], [0,2], [1,0], [1,1], [1,2]],
+    'V': [[0,0], [0,1], [0,2], [1,0], [2,0]],
+    'W': [[0,0], [0,1], [1,1], [1,2], [2,2]],
+    'X': [[1,0], [0,1], [1,1], [2,1], [1,2]],
+    'Y': [[0,1], [1,0], [1,1], [1,2], [1,3]],
+    'Z': [[0,0], [0,1], [1,1], [2,1], [2,2]]
+};
+
+let pieces = [];
+let boardGrid = [];
+let savedState = null;
+let isSolving = false;
+
+class Piece {
+    constructor(id, shapeDef) {
+        this.id = id;
+        this.baseShape = this.normalizeShape(shapeDef);
+        this.currentShape = this.baseShape;
+        this.element = null;
+        this.location = 'pool-active'; // 'board', 'pool-active', 'pool-inactive'
+        this.boardPos = null; // {r, c}
+        this.variations = this.generateVariations();
+    }
+
+    normalizeShape(coords) {
+        let minX = Math.min(...coords.map(c => c[1]));
+        let minY = Math.min(...coords.map(c => c[0]));
+        let shape = [];
+        coords.forEach(c => {
+            let r = c[0] - minY;
+            let cIdx = c[1] - minX;
+            if(!shape[r]) shape[r] = [];
+            shape[r][cIdx] = 1;
+        });
+        let h = shape.length;
+        let w = 0;
+        shape.forEach(row => w = Math.max(w, row ? row.length : 0));
+        let grid = Array(h).fill(0).map(() => Array(w).fill(0));
+        coords.forEach(c => {
+            grid[c[0] - minY][c[1] - minX] = 1;
+        });
+        return grid;
+    }
+
+    generateVariations() {
+        let vars = [];
+        let seen = new Set();
+        let current = this.baseShape;
+        
+        for(let f=0; f<2; f++) {
+            for(let r=0; r<4; r++) {
+                let signature = JSON.stringify(current);
+                if(!seen.has(signature)) {
+                    vars.push(current);
+                    seen.add(signature);
+                }
+                current = this.rotateMatrix(current);
+            }
+            current = this.flipMatrix(this.baseShape);
+        }
+        return vars;
+    }
+
+    rotateMatrix(matrix) {
+        const N = matrix.length;
+        const M = matrix[0].length;
+        let ret = Array(M).fill(0).map(() => Array(N).fill(0));
+        for(let r=0; r<N; r++) {
+            for(let c=0; c<M; c++) {
+                ret[c][N - 1 - r] = matrix[r][c];
+            }
+        }
+        return ret;
+    }
+
+    flipMatrix(matrix) {
+        return matrix.map(row => [...row].reverse());
+    }
+
+    updateDOM() {
+        if(!this.element) return;
+        this.element.innerHTML = '';
+        const h = this.currentShape.length;
+        const w = this.currentShape[0].length;
+        const cellSize = getCellSize();
+        
+        this.element.style.gridTemplateRows = `repeat(${h}, 1fr)`;
+        this.element.style.gridTemplateColumns = `repeat(${w}, 1fr)`;
+        this.element.style.width = (w * cellSize) + 'px';
+        this.element.style.height = (h * cellSize) + 'px';
+
+        for(let r=0; r<h; r++) {
+            for(let c=0; c<w; c++) {
+                let div = document.createElement('div');
+                div.className = 'piece-cell';
+                if(this.currentShape[r][c]) {
+                    div.classList.add(`c-${this.id}`);
+                } else {
+                    div.style.visibility = 'hidden';
+                }
+                this.element.appendChild(div);
+            }
+        }
+    }
+
+    tryRotate() {
+        let oldShape = this.currentShape;
+        this.currentShape = this.rotateMatrix(this.currentShape);
+        
+        if (this.location === 'board') {
+            if (!isValidPlacement(this, this.boardPos.r, this.boardPos.c, this.id)) {
+                this.currentShape = oldShape;
+                return false;
+            }
+            updateBoardGrid();
+        }
+        this.updateDOM();
+        return true;
+    }
+    
+    tryFlip() {
+        let oldShape = this.currentShape;
+        this.currentShape = this.flipMatrix(this.currentShape);
+        
+        if (this.location === 'board') {
+            if (!isValidPlacement(this, this.boardPos.r, this.boardPos.c, this.id)) {
+                this.currentShape = oldShape;
+                return false;
+            }
+            updateBoardGrid();
+        }
+        this.updateDOM();
+        return true;
+    }
+}
+
+function initGame() {
+    const root = document.documentElement;
+    const padding = 30; 
+    if(window.innerWidth < 800) {
+        let availableWidth = window.innerWidth - padding;
+        let size = Math.floor(availableWidth / 12); 
+        if(size < 25) size = 25;
+        if(size > 45) size = 45;
+        root.style.setProperty('--cell-size', size + "px");
+    } else {
+        root.style.setProperty('--cell-size', "45px");
+    }
+
+    pieces = [];
+    document.getElementById('pool-active').innerHTML = '';
+    document.getElementById('pool-inactive').innerHTML = '';
+
+    Object.keys(PIECES_DEF).forEach((key) => {
+        let p = new Piece(key, PIECES_DEF[key]);
+        pieces.push(p);
+        createPieceDOM(p);
+        movePieceToPool(p, 'pool-active');
+    });
+
+    updateBoardSize();
+}
+
+function updateBoardSize() {
+    const activeCount = pieces.length - pieces.filter(p => p.location === 'pool-inactive').length;
+    // 最小値を1に変更し、ピース数が少ない場合でもボード幅が一致するように修正
+    BOARD_COLS = Math.max(1, Math.min(12, activeCount));
+    
+    document.getElementById('board-width-display').innerText = BOARD_COLS;
+    document.getElementById('penta-count-display').innerText = activeCount;
+
+    const boardEl = document.getElementById('board');
+    const cellSize = getCellSize();
+
+    boardEl.style.gridTemplateColumns = `repeat(${BOARD_COLS}, ${cellSize}px)`;
+    boardEl.style.gridTemplateRows = `repeat(${BOARD_ROWS}, ${cellSize}px)`;
+    boardEl.style.width = (BOARD_COLS * cellSize) + 'px';
+    boardEl.style.height = (BOARD_ROWS * cellSize) + 'px';
+    boardEl.innerHTML = '';
+    
+    boardGrid = Array(BOARD_ROWS).fill(0).map(() => Array(BOARD_COLS).fill(0));
+
+    for(let i=0; i<BOARD_ROWS*BOARD_COLS; i++) {
+        let d = document.createElement('div');
+        d.className = 'cell';
+        boardEl.appendChild(d);
+    }
+
+    const boardPieces = pieces.filter(p => p.location === 'board');
+    boardPieces.forEach(p => {
+        if(!isValidPlacement(p, p.boardPos.r, p.boardPos.c, p.id)) {
+            movePieceToPool(p, 'pool-active');
+        } else {
+            placePieceOnBoard(p, p.boardPos.r, p.boardPos.c);
+        }
+    });
+
+    organizePool('pool-active');
+    organizePool('pool-inactive');
+}
+
+function createPieceDOM(piece) {
+    let el = document.createElement('div');
+    el.className = 'piece';
+    el.id = `piece-${piece.id}`;
+    piece.element = el;
+    piece.updateDOM();
+    
+    el.addEventListener('mousedown', handleDragStart);
+    el.addEventListener('touchstart', handleDragStart, {passive: false});
+}
+
+function organizePool(poolId) {
+    const container = document.getElementById(poolId);
+    const containerWidth = container.getBoundingClientRect().width || 300;
+    
+    const poolPieces = pieces.filter(p => p.location === poolId);
+    const cellSize = getCellSize();
+    const margin = 10;
+    
+    let x = margin;
+    let y = margin;
+    let maxHeightInRow = 0;
+    
+    poolPieces.forEach(p => {
+        const pWidth = p.currentShape[0].length * cellSize;
+        const pHeight = p.currentShape.length * cellSize;
+
+        if (x + pWidth > containerWidth - margin && x > margin) {
+            x = margin;
+            y += maxHeightInRow + margin; 
+            maxHeightInRow = 0;
+        }
+        
+        p.element.style.left = x + 'px';
+        p.element.style.top = y + 'px';
+        p.element.style.position = 'absolute';
+        
+        if (p.element.parentElement !== container) {
+            container.appendChild(p.element);
+        }
+
+        x += pWidth + margin;
+        if(pHeight > maxHeightInRow) maxHeightInRow = pHeight;
+    });
+
+    const newHeight = y + maxHeightInRow + 50;
+    container.style.height = newHeight + 'px';
+}
+
+function movePieceToPool(piece, poolId) {
+    if(piece.location === 'board') {
+        removePieceFromBoardGrid(piece);
+    }
+    piece.location = poolId;
+    piece.boardPos = null;
+    organizePool(poolId);
+}
+
+/**
+ * 2. ドラッグ＆ドロップ ＆ クリック判定
+ */
+let draggingPiece = null;
+let dragOffset = {x:0, y:0};
+let dragStartCoords = {x:0, y:0}; 
+let isDragging = false;
+let hasMoved = false; 
+
+function handleDragStart(e) {
+    if(isSolving) return;
+    const pieceId = e.currentTarget.id.replace('piece-', '');
+    draggingPiece = pieces.find(p => p.id === pieceId);
+    
+    const evt = e.type === 'touchstart' ? e.touches[0] : e;
+    const rect = draggingPiece.element.getBoundingClientRect();
+    
+    dragOffset.x = evt.clientX - rect.left;
+    dragOffset.y = evt.clientY - rect.top;
+    dragStartCoords = {x: evt.clientX, y: evt.clientY};
+    
+    hasMoved = false;
+    isDragging = true;
+
+    // 修正: scroll量を加算して絶対位置を正しく計算
+    draggingPiece.element.style.left = (rect.left + window.scrollX) + 'px';
+    draggingPiece.element.style.top = (rect.top + window.scrollY) + 'px';
+    document.body.appendChild(draggingPiece.element);
+
+    draggingPiece.element.classList.add('dragging');
+
+    if(draggingPiece.location === 'board') {
+        removePieceFromBoardGrid(draggingPiece);
+    }
+
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+    document.addEventListener('touchmove', handleDragMove, {passive: false});
+    document.addEventListener('touchend', handleDragEnd);
+}
+
+function handleDragMove(e) {
+    const evt = e.type === 'touchmove' ? e.touches[0] : e;
+    
+    const dx = evt.clientX - dragStartCoords.x;
+    const dy = evt.clientY - dragStartCoords.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        hasMoved = true;
+    }
+    if (e.type === 'touchmove') e.preventDefault(); 
+
+    // 修正: scroll量を加算して追従位置を正しく計算
+    draggingPiece.element.style.left = (evt.clientX - dragOffset.x + window.scrollX) + 'px';
+    draggingPiece.element.style.top = (evt.clientY - dragOffset.y + window.scrollY) + 'px';
+}
+
+function handleDragEnd(e) {
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+    document.removeEventListener('touchmove', handleDragMove);
+    document.removeEventListener('touchend', handleDragEnd);
+    
+    draggingPiece.element.classList.remove('dragging');
+    isDragging = false;
+
+    // クリック判定 (移動していない場合)
+    if (!hasMoved) {
+        // [新機能] Ctrl+Click: 使用/除外の切り替え
+        if (e.ctrlKey || e.metaKey) {
+            let nextPool = '';
+            // inactiveならactiveへ。それ以外(active or board)ならinactiveへ
+            if (draggingPiece.location === 'pool-inactive') {
+                nextPool = 'pool-active';
+            } else {
+                nextPool = 'pool-inactive';
+            }
+            
+            // DOM上の位置をリセットしてから移動させるために一旦プール処理を通す
+            movePieceToPool(draggingPiece, nextPool);
+            updateBoardSize(); // ボードサイズ更新＆レイアウト整理
+            
+            draggingPiece = null;
+            return;
+        }
+
+        // 既存の回転/反転処理
+        if(draggingPiece.location === 'board') {
+            const cellSize = getCellSize();
+            document.getElementById('board').appendChild(draggingPiece.element);
+            draggingPiece.element.style.left = (draggingPiece.boardPos.c * cellSize) + 'px';
+            draggingPiece.element.style.top = (draggingPiece.boardPos.r * cellSize) + 'px';
+            placePieceOnBoard(draggingPiece, draggingPiece.boardPos.r, draggingPiece.boardPos.c);
+            
+            if(e.shiftKey) draggingPiece.tryFlip();
+            else draggingPiece.tryRotate();
+        } else {
+            movePieceToPool(draggingPiece, draggingPiece.location);
+            if(e.shiftKey) draggingPiece.tryFlip();
+            else draggingPiece.tryRotate();
+            organizePool(draggingPiece.location);
+        }
+        draggingPiece = null;
+        return;
+    }
+
+    // ドロップ判定
+    const boardEl = document.getElementById('board');
+    const poolInactiveEl = document.getElementById('pool-inactive');
+    
+    const pRect = draggingPiece.element.getBoundingClientRect();
+    const bRect = boardEl.getBoundingClientRect();
+    const piRect = poolInactiveEl.getBoundingClientRect();
+    const center = {x: pRect.left + pRect.width/2, y: pRect.top + pRect.height/2};
+    
+    let targetLocation = 'pool-active'; 
+
+    if(isInside(center, bRect)) {
+        const cellSize = getCellSize();
+        let relativeX = pRect.left - bRect.left;
+        let relativeY = pRect.top - bRect.top;
+        
+        let col = Math.round(relativeX / cellSize);
+        let row = Math.round(relativeY / cellSize);
+        
+        if(isValidPlacement(draggingPiece, row, col, draggingPiece.id)) {
+            placePieceOnBoard(draggingPiece, row, col);
+            targetLocation = 'board';
+        } 
+    } else if(isInside(center, piRect)) {
+        targetLocation = 'pool-inactive';
+    }
+
+    if (targetLocation !== 'board') {
+        movePieceToPool(draggingPiece, targetLocation);
+    }
+
+    updateBoardSize();
+    draggingPiece = null;
+}
+
+function isInside(point, rect) {
+    return point.x >= rect.left && point.x <= rect.right && 
+           point.y >= rect.top && point.y <= rect.bottom;
+}
+
+function isValidPlacement(piece, r, c, ignoreId) {
+    const shape = piece.currentShape;
+    const h = shape.length;
+    const w = shape[0].length;
+    
+    for(let i=0; i<h; i++) {
+        for(let j=0; j<w; j++) {
+            if(shape[i][j] === 1) {
+                let targetR = r + i;
+                let targetC = c + j;
+                if(targetR < 0 || targetR >= BOARD_ROWS || targetC < 0 || targetC >= BOARD_COLS) return false;
+                if(boardGrid[targetR][targetC] !== 0 && boardGrid[targetR][targetC] !== ignoreId) return false;
+            }
+        }
+    }
+    return true;
+}
+
+function removePieceFromBoardGrid(piece) {
+    if(!piece.boardPos) return;
+    const {r, c} = piece.boardPos;
+    const shape = piece.currentShape;
+    for(let i=0; i<shape.length; i++) {
+        for(let j=0; j<shape[0].length; j++) {
+            if(shape[i][j] === 1) {
+                if(boardGrid[r+i][c+j] === piece.id) {
+                    boardGrid[r+i][c+j] = 0;
+                }
+            }
+        }
+    }
+}
+
+function updateBoardGrid() {
+    boardGrid = Array(BOARD_ROWS).fill(0).map(() => Array(BOARD_COLS).fill(0));
+    const boardPieces = pieces.filter(p => p.location === 'board');
+    boardPieces.forEach(p => {
+        const {r, c} = p.boardPos;
+        const shape = p.currentShape;
+        for(let i=0; i<shape.length; i++) {
+            for(let j=0; j<shape[0].length; j++) {
+                if(shape[i][j] === 1) {
+                    boardGrid[r+i][c+j] = p.id;
+                }
+            }
+        }
+    });
+}
+
+function placePieceOnBoard(piece, r, c) {
+    piece.location = 'board';
+    piece.boardPos = {r, c};
+    
+    const shape = piece.currentShape;
+    for(let i=0; i<shape.length; i++) {
+        for(let j=0; j<shape[0].length; j++) {
+            if(shape[i][j] === 1) {
+                boardGrid[r+i][c+j] = piece.id;
+            }
+        }
+    }
+    
+    const boardEl = document.getElementById('board');
+    boardEl.appendChild(piece.element);
+    
+    const cellSize = getCellSize();
+    piece.element.style.position = 'absolute';
+    piece.element.style.left = (c * cellSize) + 'px';
+    piece.element.style.top = (r * cellSize) + 'px';
+}
+
+/**
+ * 3. ソルバーアルゴリズム
+ */
+async function startSolver() {
+    if(isSolving) return;
+    saveState();
+    
+    document.getElementById('btn-solve').disabled = true;
+    document.getElementById('btn-reset').disabled = true;
+    document.getElementById('status-msg').textContent = "計算中...";
+    document.getElementById('progress-container').style.display = 'block';
+    document.getElementById('progress-bar').style.width = '0%';
+    
+    let currentBoard = boardGrid.map(row => [...row]);
+    let targetPieces = pieces.filter(p => p.location === 'pool-active');
+    
+    let emptyCount = 0;
+    for(let r=0; r<BOARD_ROWS; r++) {
+        for(let c=0; c<BOARD_COLS; c++) {
+            if(currentBoard[r][c] === 0) emptyCount++;
+        }
+    }
+    
+    if(emptyCount !== targetPieces.length * 5) {
+        finishSolver(false, "空きマスの数とピースの面積が合いません");
+        return;
+    }
+
+    isSolving = true;
+    
+    try {
+        let solution = await solveRecursively(currentBoard, targetPieces, 0);
+        if(solution) {
+            applySolution(solution);
+            finishSolver(true, "解が見つかりました！");
+        } else {
+            finishSolver(false, "配置不可能です");
+        }
+    } catch (e) {
+        console.error(e);
+        finishSolver(false, "エラーが発生しました");
+    }
+}
+
+function checkIslands(board) {
+    let visited = Array(BOARD_ROWS).fill(0).map(() => Array(BOARD_COLS).fill(false));
+    
+    for(let r=0; r<BOARD_ROWS; r++) {
+        for(let c=0; c<BOARD_COLS; c++) {
+            if(board[r][c] === 0 && !visited[r][c]) {
+                let size = 0;
+                let stack = [[r,c]];
+                visited[r][c] = true;
+                
+                while(stack.length > 0) {
+                    let [cr, cc] = stack.pop();
+                    size++;
+                    const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+                    for(let d of dirs) {
+                        let nr = cr + d[0];
+                        let nc = cc + d[1];
+                        if(nr>=0 && nr<BOARD_ROWS && nc>=0 && nc<BOARD_COLS && board[nr][nc]===0 && !visited[nr][nc]) {
+                            visited[nr][nc] = true;
+                            stack.push([nr,nc]);
+                        }
+                    }
+                }
+                if(size % 5 !== 0) return false;
+            }
+        }
+    }
+    return true;
+}
+
+function findFirstEmpty(board) {
+    for(let c=0; c<BOARD_COLS; c++) {
+        for(let r=0; r<BOARD_ROWS; r++) {
+            if(board[r][c] === 0) return {r, c};
+        }
+    }
+    return null;
+}
+
+let steps = 0;
+
+async function solveRecursively(board, remainingPieces, depth) {
+    steps++;
+    if(steps % 500 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        let total = pieces.filter(p => p.location === 'pool-active').length;
+        if(total > 0) {
+            let pct = Math.max(0, ((total - remainingPieces.length) / total) * 100);
+            document.getElementById('progress-bar').style.width = pct + '%';
+        }
+    }
+
+    if(remainingPieces.length === 0) return [];
+    if(!checkIslands(board)) return null;
+
+    let emptyPos = findFirstEmpty(board);
+    if(!emptyPos) return null;
+
+    const {r, c} = emptyPos;
+
+    for(let i=0; i<remainingPieces.length; i++) {
+        let piece = remainingPieces[i];
+        let others = remainingPieces.filter((_, idx) => idx !== i);
+
+        for(let shape of piece.variations) {
+            let offsetR = 0;
+            let offsetC = 0;
+            let found = false;
+            for(let dc=0; dc<shape[0].length; dc++) {
+                 for(let dr=0; dr<shape.length; dr++) {
+                    if(shape[dr][dc] === 1) {
+                        offsetR = dr;
+                        offsetC = dc;
+                        found = true;
+                        break;
+                    }
+                }
+                if(found) break;
+            }
+
+            let startR = r - offsetR;
+            let startC = c - offsetC;
+
+            if(canPlace(board, shape, startR, startC)) {
+                let newBoard = placeShape(board, shape, startR, startC, piece.id);
+                let res = await solveRecursively(newBoard, others, depth + 1);
+                
+                if(res) {
+                    res.push({
+                        pieceId: piece.id,
+                        shape: shape,
+                        r: startR,
+                        c: startC
+                    });
+                    return res;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function canPlace(board, shape, r, c) {
+    const H = shape.length;
+    const W = shape[0].length;
+    for(let i=0; i<H; i++) {
+        for(let j=0; j<W; j++) {
+            if(shape[i][j] === 1) {
+                let nr = r + i;
+                let nc = c + j;
+                if(nr < 0 || nr >= BOARD_ROWS || nc < 0 || nc >= BOARD_COLS) return false;
+                if(board[nr][nc] !== 0) return false;
+            }
+        }
+    }
+    return true;
+}
+
+function placeShape(board, shape, r, c, id) {
+    let newBoard = board.map(row => [...row]);
+    const H = shape.length;
+    const W = shape[0].length;
+    for(let i=0; i<H; i++) {
+        for(let j=0; j<W; j++) {
+            if(shape[i][j] === 1) {
+                newBoard[r+i][c+j] = id;
+            }
+        }
+    }
+    return newBoard;
+}
+
+function finishSolver(success, msg) {
+    isSolving = false;
+    document.getElementById('btn-solve').disabled = false;
+    document.getElementById('btn-reset').disabled = false;
+    document.getElementById('status-msg').textContent = msg;
+    document.getElementById('progress-bar').style.width = success ? '100%' : '0%';
+    if(success) document.getElementById('btn-restore').disabled = false;
+}
+
+function applySolution(solutionList) {
+    solutionList.forEach(sol => {
+        let piece = pieces.find(p => p.id === sol.pieceId);
+        piece.currentShape = sol.shape;
+        piece.updateDOM();
+        placePieceOnBoard(piece, sol.r, sol.c);
+    });
+    updateBoardSize(); 
+}
+
+/**
+ * 4. Undo / Reset 機能
+ */
+function saveState() {
+    savedState = pieces.map(p => ({
+        id: p.id,
+        location: p.location,
+        boardPos: p.boardPos ? {...p.boardPos} : null,
+        currentShape: JSON.parse(JSON.stringify(p.currentShape))
+    }));
+}
+
+function restoreState() {
+    if(!savedState) return;
+    
+    savedState.forEach(state => {
+        let piece = pieces.find(p => p.id === state.id);
+        piece.location = state.location;
+        piece.boardPos = state.boardPos;
+        piece.currentShape = state.currentShape;
+        piece.updateDOM();
+    });
+    
+    updateBoardSize();
+
+    document.getElementById('btn-restore').disabled = true;
+    document.getElementById('status-msg').textContent = "元に戻しました";
+    document.getElementById('progress-bar').style.width = '0%';
+}
+
+function resetGame() {
+    if(isSolving) return;
+    initGame();
+    document.getElementById('status-msg').textContent = "";
+    document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('btn-restore').disabled = true;
+}
+
+window.onload = initGame;
+window.addEventListener('resize', () => {
+    if(!isDragging && !isSolving) initGame();
+});
+
+</script>
+</body>
+</html>
